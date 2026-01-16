@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenPI 部署问题与解决方案</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3, h4 {
+            color: #2c3e50;
+        }
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            margin-top: 40px;
+        }
+        h3 {
+            margin-top: 30px;
+        }
+        ul, ol {
+            padding-left: 25px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #3498db;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .solution {
+            background-color: #d4edda;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .symptom {
+            background-color: #f8d7da;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>OpenPI 部署问题与解决方案（2026-01-16）</h1>
+
+    <h2>项目背景</h2>
+    <p>OpenPI 是一个基于视觉-语言-动作（VLA）模型的机器人控制框架，包含 π₀、π₀-FAST、π₀.₅ 等模型架构，使用 WebSocket 服务器进行模型推理，支持 Docker 容器化部署。</p>
+
+    <h2>部署环境</h2>
+    <ul>
+        <li>服务器：192.168.0.5（Ubuntu 22.04）</li>
+        <li>本地环境：Windows 10</li>
+        <li>Docker 版本：最新版</li>
+        <li>模型：pi0_aloha_towel</li>
+    </ul>
+
+    <h2>遇到的问题与解决方案</h2>
+
+    <h3>问题 1：DNS 解析失败</h3>
+    <div class="symptom">
+        <strong>症状</strong>：
+        <ul>
+            <li>Docker 构建时无法解析 <code>ghcr.io</code> 域名</li>
+            <li>无法从 GCS（Google Cloud Storage）下载模型和依赖</li>
+        </ul>
+    </div>
+    <div class="solution">
+        <strong>解决方案</strong>：
+        <ol>
+            <li>使用本地模型替代 GCS 下载
+                <ul>
+                    <li>修改 <code>scripts/serve_policy.py</code> 中的模型路径：
+                        <ul>
+                            <li>从：<code>gs://openpi-assets/checkpoints/pi0_aloha_sim</code></li>
+                            <li>到：<code>/home/ubuntu2204/pi0-docker/checkpoints/pi0_aloha_towel</code></li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+            <li>绕过下载依赖
+                <ul>
+                    <li>修改 <code>src/openpi/shared/download.py</code> 中的 <code>maybe_download()</code> 函数</li>
+                    <li>创建模拟 Path 对象，跳过 GCS 下载步骤</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <h3>问题 2：Tokenizer 依赖问题</h3>
+    <div class="symptom">
+        <strong>症状</strong>：
+        <ul>
+            <li>需要从 GCS 下载 <code>paligemma_tokenizer.model</code></li>
+            <li>容器内网络问题导致下载失败</li>
+        </ul>
+    </div>
+    <div class="solution">
+        <strong>解决方案</strong>：
+        <ol>
+            <li>本地准备 tokenizer 模型
+                <ul>
+                    <li>从其他网络环境下载 <code>paligemma_tokenizer.model</code></li>
+                    <li>复制到服务器的 <code>checkpoints</code> 目录</li>
+                </ul>
+            </li>
+            <li>修改 <code>src/openpi/models/tokenizer.py</code>
+                <ul>
+                    <li>调整 <code>PaligemmaTokenizer</code> 类，使用本地 tokenizer 路径</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <h3>问题 3：文件修改语法错误</h3>
+    <div class="symptom">
+        <strong>症状</strong>：
+        <ul>
+            <li>PowerShell 中使用 sed 命令时出现引号和反斜杠转义问题</li>
+        </ul>
+    </div>
+    <div class="solution">
+        <strong>解决方案</strong>：
+        <ol>
+            <li>使用更简单的 sed 命令格式</li>
+            <li>对于复杂修改，使用 echo 语句重写文件</li>
+        </ol>
+    </div>
+
+    <h3>问题 4：权限问题</h3>
+    <div class="symptom">
+        <strong>症状</strong>：
+        <ul>
+            <li>无法修改服务器的 DNS 设置（需要 sudo 权限）</li>
+        </ul>
+    </div>
+    <div class="solution">
+        <strong>解决方案</strong>：
+        <ul>
+            <li>采用本地模型替代网络下载的方案</li>
+            <li>避免修改系统级配置</li>
+        </ul>
+    </div>
+
+    <h2>部署步骤总结</h2>
+
+    <ol>
+        <li><strong>准备本地模型</strong>：
+            <ul>
+                <li>确保 <code>checkpoints/pi0_aloha_towel</code> 目录存在</li>
+                <li>确保包含所有必要的模型文件和 tokenizer</li>
+            </ul>
+        </li>
+        <li><strong>修改配置文件</strong>：
+            <ul>
+                <li><code>scripts/serve_policy.py</code>：使用本地模型路径</li>
+                <li><code>src/openpi/shared/download.py</code>：跳过下载步骤</li>
+                <li><code>src/openpi/models/tokenizer.py</code>：使用本地 tokenizer</li>
+            </ul>
+        </li>
+        <li><strong>构建和运行 Docker 容器</strong>：
+            <pre><code>docker compose -f scripts/docker/compose.yml up --build</code></pre>
+        </li>
+        <li><strong>测试模型推理</strong>：
+            <pre><code>python examples/simple_client/main.py --host localhost --port 8765 --env aloha_towel --num-steps 10</code></pre>
+        </li>
+    </ol>
+
+    <h2>技术要点</h2>
+
+    <ol>
+        <li><strong>模型架构</strong>：
+            <ul>
+                <li>π₀、π₀-FAST、π₀.₅ 模型</li>
+                <li>JAX/Flax 实现，支持 PyTorch</li>
+                <li>GPU 内存要求：8GB+</li>
+            </ul>
+        </li>
+        <li><strong>网络架构</strong>：
+            <ul>
+                <li>WebSocket 服务器用于模型推理</li>
+                <li>客户端-服务器架构</li>
+            </ul>
+        </li>
+        <li><strong>依赖管理</strong>：
+            <ul>
+                <li>模型检查点（checkpoints）</li>
+                <li>Tokenizer 模型</li>
+                <li>GCS 存储依赖</li>
+            </ul>
+        </li>
+        <li><strong>容器化</strong>：
+            <ul>
+                <li>Docker Compose 部署</li>
+                <li>环境隔离和一致性</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>后续优化方向</h2>
+
+    <ol>
+        <li><strong>网络配置</strong>：
+            <ul>
+                <li>优化容器网络设置，解决 DNS 解析问题</li>
+                <li>考虑使用代理服务器</li>
+            </ul>
+        </li>
+        <li><strong>依赖管理</strong>：
+            <ul>
+                <li>实现本地缓存机制</li>
+                <li>提供离线安装包</li>
+            </ul>
+        </li>
+        <li><strong>部署自动化</strong>：
+            <ul>
+                <li>编写部署脚本，自动处理依赖和配置</li>
+                <li>实现 CI/CD 流程</li>
+            </ul>
+        </li>
+        <li><strong>监控和日志</strong>：
+            <ul>
+                <li>添加详细的日志记录</li>
+                <li>实现健康检查机制</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>结论</h2>
+    <p>通过本地模型替代网络下载的方案，成功解决了 OpenPI 部署过程中的网络依赖问题。虽然遇到了 DNS 解析、依赖下载等挑战，但通过合理的配置调整和本地资源利用，最终实现了模型的正常部署和推理。</p>
+</body>
+</html>
