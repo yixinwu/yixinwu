@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  dinov2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dinov2:latest
+    container_name: dinov2_container
+    # 使用宿主机网络
+    network_mode: host
+    # 挂载宿主机 PyTorch 环境 (Anaconda3)
+    volumes:
+      # 挂载 Anaconda Python 库
+      - /home/ubuntu2204/anaconda3/lib/python3.11/site-packages:/opt/conda/lib/python3.11/site-packages:ro
+      # 挂载 CUDA 库
+      - /usr/local/cuda:/usr/local/cuda:ro
+      # 工作目录
+      - ./data:/workspace/data
+      - ./output:/workspace/output
+      - ./tests:/workspace/tests
+      - ./examples:/workspace/examples
+      # 缓存目录
+      - dinov2_cache:/root/.cache
+    # 环境变量
+    environment:
+      - PYTHONPATH=/opt/conda/lib/python3.11/site-packages
+      - LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+      - CUDA_VISIBLE_DEVICES=0
+    # 使用 GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # 保持容器运行
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  dinov2_cache:
